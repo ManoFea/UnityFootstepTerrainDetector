@@ -1,64 +1,126 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 
 public class footSteps : MonoBehaviour
 {
+    public AudioSource footstepSource;
 
-  private AudioSource audioSource;
-  private GameObject terrainFoot;
-  private AudioSource terrainFootPrev;
-  private AudioSource terrainFootNext;
+    public AudioClip grassFootstep;
+    public AudioClip sandFootstep;
+    public AudioClip waterFootstep;
+    public AudioClip snowFootstep;
+    public AudioClip bridgeFootstep;
 
-  // LIST OF TERRAINS
-  public AudioSource footstepGrass;  // 1
-  public AudioSource footstepFloor;
+    public Transform footDetect;
 
+    public KeyCode forwardKey = KeyCode.W;
+    public KeyCode backKey = KeyCode.S;
+    public KeyCode leftKey = KeyCode.A;
+    public KeyCode rightKey = KeyCode.D;
 
-  private void Start(){
-    terrainFootNext = terrainFootPrev = footstepGrass;  // 0 - PLAYER STARTING TERRAIN
-  }
+    public float rayDistance = 2f;
+    public float fadeTime = 0.01f;
 
+    private string currentSurface = "GRASS";
+    private Coroutine fadeCoroutine;
+    private float targetVolume = 1f;
 
-  void Update()
-  {
-    audioSource = GetComponent<AudioSource>();
+    void Update()
+    {
+        DetectSurface();
 
-    terrainFoot = FindObjectOfType<TerrainDetector>().PlayerTerrain();
+        bool isWalking =
+            Input.GetKey(forwardKey) ||
+            Input.GetKey(backKey) ||
+            Input.GetKey(leftKey) ||
+            Input.GetKey(rightKey);
 
+        if (isWalking)
+        {
+            PlayFootstep();
 
-        if( Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.A) ||
-            Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.D)  )
-            {
+            if (fadeCoroutine != null)
+                StopCoroutine(fadeCoroutine);
 
-              switch(terrainFoot.name)
-              {
-                    case "GRASS":                           // 2
-                          footstepGrass.enabled   = true;   // 2
-                          terrainFootPrev = footstepGrass;  // 2
-                          break;
-                    case "floor":
-                          footstepFloor.enabled   = true;
-                          terrainFootPrev = footstepFloor;
-                          break;
-                    default:
-                          break;
+            fadeCoroutine = StartCoroutine(FadeAudio(targetVolume));
+        }
+        else
+        {
+            if (fadeCoroutine != null)
+                StopCoroutine(fadeCoroutine);
 
-              }
+            fadeCoroutine = StartCoroutine(FadeAudio(0f));
+        }
+    }
 
+    void DetectSurface()
+    {
+        RaycastHit hit;
+        Vector3 rayStart = footDetect != null ? footDetect.position : transform.position;
 
-              if(terrainFootPrev != terrainFootNext)
-                {
-                    terrainFootNext.enabled = false;
-                    terrainFootNext = terrainFootPrev;
-                }
+        if (Physics.Raycast(rayStart, Vector3.down, out hit, rayDistance))
+        {
+            currentSurface = hit.collider.gameObject.name;
+            // Debug.Log("Standing on: " + currentSurface);
+        }
+    }
 
-            }else{
-              footstepGrass.enabled = false;  // 3
-              footstepFloor.enabled = false;
+    void PlayFootstep()
+    {
+        AudioClip clip = GetClipForSurface();
 
-            }
+        if (clip == null || footstepSource == null)
+            return;
 
-  }
+        if (footstepSource.clip != clip)
+        {
+            footstepSource.Stop();
+            footstepSource.clip = clip;
+            footstepSource.volume = 0f;
+        }
 
+        footstepSource.loop = true;
+
+        if (!footstepSource.isPlaying)
+        {
+            footstepSource.volume = 0f;
+            footstepSource.Play();
+        }
+    }
+
+    IEnumerator FadeAudio(float target)
+    {
+        float startVolume = footstepSource.volume;
+        float time = 0f;
+
+        while (time < fadeTime)
+        {
+            time += Time.deltaTime;
+
+            footstepSource.volume =
+                Mathf.Lerp(startVolume, target, time / fadeTime);
+
+            yield return null;
+        }
+
+        footstepSource.volume = target;
+
+        if (target == 0f)
+        {
+            footstepSource.Stop();
+        }
+    }
+
+    AudioClip GetClipForSurface()
+    {
+        switch (currentSurface)
+        {
+            case "GRASS": return grassFootstep;
+            case "SAND": return sandFootstep;
+            case "WATER": return waterFootstep;
+            case "SNOW": return snowFootstep;
+            case "BRIDGE": return bridgeFootstep;
+            default: return grassFootstep;
+        }
+    }
 }
